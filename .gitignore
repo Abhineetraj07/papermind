@@ -1,5 +1,7 @@
 .env
 uploads/
+CLAUDE.md
+PRD.md
 __pycache__/
 *.pyc
 *.pyo
