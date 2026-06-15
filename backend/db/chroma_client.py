@@ -1,6 +1,6 @@
 import logging
 import chromadb
-from chromadb import HttpClient, Collection
+from chromadb import Collection
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -11,7 +11,7 @@ DOCUMENTS_COLLECTION = "documents"
 
 class ChromaClient:
     def __init__(self):
-        self._client: HttpClient | None = None
+        self._client = None
 
     def connect(self):
         self._client = chromadb.HttpClient(

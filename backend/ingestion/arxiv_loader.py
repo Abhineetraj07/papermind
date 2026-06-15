@@ -13,7 +13,7 @@ async def fetch_arxiv_papers(topic: str, limit: int = 10) -> list[dict]:
                 "title": result.title,
                 "authors": [a.name for a in result.authors],
                 "abstract": result.summary,
-                "keywords": [c.term for c in result.categories],
+                "keywords": result.categories,
                 "published_date": result.published.isoformat(),
                 "pdf_url": result.pdf_url,
             })

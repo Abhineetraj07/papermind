@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   nginx:
     image: nginx:alpine
@@ -71,7 +69,7 @@ services:
       retries: 10
 
   chromadb:
-    image: chromadb/chroma:latest
+    image: chromadb/chroma:0.6.3
     ports:
       - "8001:8000"
     volumes:

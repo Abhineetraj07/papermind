@@ -25,6 +25,12 @@ def embed_and_store(chunks: list[dict], source: str, user_id: str | None = None)
             meta = {**c["metadata"], "source": source, "parent_id": c["parent_id"]}
             if user_id:
                 meta["user_id"] = user_id
+            # ChromaDB only accepts str/int/float/bool — serialize lists
+            meta = {
+                k: ",".join(v) if isinstance(v, list) else v
+                for k, v in meta.items()
+                if isinstance(v, (str, int, float, bool, list))
+            }
             metadatas.append(meta)
 
         collection.add(ids=ids, embeddings=embeddings, documents=texts, metadatas=metadatas)
