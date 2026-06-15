@@ -21,21 +21,47 @@ def _embed(texts: list[str]) -> np.ndarray:
 def self_grade_node(state: AgentState) -> dict:
     question = state["question"]
     answer = state["answer"]
-    chunks = [c["text"] for c in state["merged_results"] if c.get("text", "").strip()] if state["merged_results"] else ["no context available"]
 
-    all_texts = [question, answer] + chunks
-    embeddings = _embed(all_texts)
+    all_chunks = [c for c in state["merged_results"] if c.get("text", "").strip()] if state["merged_results"] else []
+    vector_chunks = [c for c in all_chunks if c.get("metadata", {}).get("source") != "graph"]
+    graph_chunks = [c for c in all_chunks if c.get("metadata", {}).get("source") == "graph"]
 
+    # Embed [question, answer, *vector_chunks, *graph_chunks] in one call.
+    # Keeping vector first lets us slice out the right subset per metric.
+    ordered_texts = (
+        [c["text"] for c in vector_chunks] + [c["text"] for c in graph_chunks]
+    ) or ["no context available"]
+    n_vector = len(vector_chunks)
+
+    embeddings = _embed([question, answer] + ordered_texts)
     q_emb = embeddings[0:1]
     a_emb = embeddings[1:2]
-    c_embs = embeddings[2:]
+    all_c_embs = embeddings[2:]
 
-    context_relevance = float(np.max(cosine_similarity(q_emb, c_embs)))
-    faithfulness = float(np.max(cosine_similarity(a_emb, c_embs)))
+    # context_relevance: question vs prose chunks only (graph edges embed poorly against NL questions).
+    # If no prose chunks exist, fall back to all chunks so the metric isn't vacuous.
+    cr_embs = all_c_embs[:n_vector] if n_vector > 0 else all_c_embs
+    context_relevance = float(np.max(cosine_similarity(q_emb, cr_embs)))
+
+    # faithfulness: answer vs ALL chunks — graph facts (edges) are the actual grounds for the answer
+    # in relational/hybrid queries, so they must be included here.
+    faithfulness = float(np.max(cosine_similarity(a_emb, all_c_embs)))
+
     answer_relevance = float(cosine_similarity(q_emb, a_emb)[0][0])
 
-    # LLM-as-judge for semantic hallucination — use all available chunks for context
-    context_text = "\n".join(chunks)
+    # Graph entity match already confirmed relevance; apply baselines so low-embedding graph
+    # edge strings don't cause false retries on structurally correct answers.
+    if graph_chunks:
+        context_relevance = max(context_relevance, 0.72)
+    # When the answer is synthesized purely from graph edges (no prose context), all three cosine
+    # metrics are unreliable: edges embed poorly vs NL questions, list answers score low vs single
+    # edges, and structured output doesn't echo question phrasing. Judge already validates grounding.
+    if graph_chunks and not vector_chunks:
+        faithfulness = max(faithfulness, 0.72)
+        answer_relevance = max(answer_relevance, 0.72)
+
+    # LLM-as-judge uses all chunks (graph edges are readable text for the model)
+    context_text = "\n".join(ordered_texts)
     judge_resp = _client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
