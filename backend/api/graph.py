@@ -9,7 +9,8 @@ router = APIRouter()
 
 
 class GraphNode(BaseModel):
-    name: str
+    id: str
+    label: str
     type: str
 
 
@@ -24,24 +25,60 @@ class GraphResponse(BaseModel):
     edges: list[GraphEdge]
 
 
+@router.get("/overview", response_model=GraphResponse)
+async def overview(current_user: User = Depends(get_current_user)):
+    records = neo4j_client.run("""
+        MATCH (n)-[r]->(m)
+        RETURN
+            coalesce(n.name, n.title, 'unknown') AS source_id,
+            coalesce(n.title, n.name, 'unknown') AS source_label,
+            labels(n)[0] AS source_type,
+            type(r) AS relationship,
+            coalesce(m.name, m.title, 'unknown') AS target_id,
+            coalesce(m.title, m.name, 'unknown') AS target_label,
+            labels(m)[0] AS target_type
+        LIMIT 120
+    """)
+    nodes: dict[str, GraphNode] = {}
+    edges: list[GraphEdge] = []
+    for rec in records:
+        sid, tid = rec["source_id"], rec["target_id"]
+        if sid not in nodes:
+            nodes[sid] = GraphNode(id=sid, label=rec["source_label"], type=rec["source_type"] or "Unknown")
+        if tid not in nodes:
+            nodes[tid] = GraphNode(id=tid, label=rec["target_label"], type=rec["target_type"] or "Unknown")
+        edges.append(GraphEdge(source=sid, target=tid, relationship=rec["relationship"]))
+    return GraphResponse(nodes=list(nodes.values()), edges=edges)
+
+
 @router.get("/explore", response_model=GraphResponse)
 async def explore(entity: str, current_user: User = Depends(get_current_user)):
     records = neo4j_client.run(
         """
-        MATCH (n {name: $name})-[r]-(m)
-        RETURN n.name AS source, type(r) AS relationship, m.name AS target, labels(m)[0] AS target_type
+        MATCH (n)-[r]-(m)
+        WHERE toLower(coalesce(n.name, n.title, '')) CONTAINS toLower($entity)
+        RETURN
+            coalesce(n.name, n.title, 'unknown') AS source_id,
+            coalesce(n.title, n.name, 'unknown') AS source_label,
+            labels(n)[0] AS source_type,
+            type(r) AS relationship,
+            coalesce(m.name, m.title, 'unknown') AS target_id,
+            coalesce(m.title, m.name, 'unknown') AS target_label,
+            labels(m)[0] AS target_type
         LIMIT 50
         """,
-        name=entity,
+        entity=entity,
     )
-    nodes, edges = {entity: "Unknown"}, []
-    for r in records:
-        nodes[r["target"]] = r["target_type"]
-        edges.append(GraphEdge(source=r["source"], target=r["target"], relationship=r["relationship"]))
-    return GraphResponse(
-        nodes=[GraphNode(name=n, type=t) for n, t in nodes.items()],
-        edges=edges,
-    )
+    nodes: dict[str, GraphNode] = {}
+    edges: list[GraphEdge] = []
+    for rec in records:
+        sid, tid = rec["source_id"], rec["target_id"]
+        if sid not in nodes:
+            nodes[sid] = GraphNode(id=sid, label=rec["source_label"], type=rec["source_type"] or "Unknown")
+        if tid not in nodes:
+            nodes[tid] = GraphNode(id=tid, label=rec["target_label"], type=rec["target_type"] or "Unknown")
+        edges.append(GraphEdge(source=sid, target=tid, relationship=rec["relationship"]))
+    return GraphResponse(nodes=list(nodes.values()), edges=edges)
 
 
 @router.get("/authors/{name}")
