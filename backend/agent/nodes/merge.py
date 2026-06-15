@@ -6,15 +6,16 @@ def merge_node(state: AgentState) -> dict:
 
     # Convert graph results to chunk-like dicts for uniform handling
     for record in state.get("graph_results", []):
-        text = (
-            f"{record.get('source_name') or record.get('source_title', '')} "
-            f"--[{record.get('relationship', '')}]--> "
-            f"{record.get('target_name') or record.get('target_title', '')}"
-        )
+        source = record.get("source_name") or record.get("source_title") or ""
+        target = record.get("target_name") or record.get("target_title") or ""
+        rel = record.get("relationship") or ""
+        text = f"{source} --[{rel}]--> {target}".strip()
+        if not text or text == "--[]-->":
+            continue
         merged.append({
             "text": text,
-            "metadata": {"source": "graph", "type": record.get("target_type", "")},
-            "score": 0.5,  # graph results get a baseline score; reranked below
+            "metadata": {"source": "graph", "type": record.get("target_type", ""), "title": source},
+            "score": 0.5,
         })
 
     # Deduplicate by text content

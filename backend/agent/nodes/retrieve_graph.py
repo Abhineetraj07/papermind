@@ -24,12 +24,13 @@ def retrieve_graph_node(state: AgentState) -> dict:
     entities = [e.strip() for e in resp.choices[0].message.content.split(",")]
 
     results = []
-    for entity in entities[:3]:  # limit to top 3 entities
+    for entity in entities[:3]:
+        entity_lower = entity.lower()
         records = neo4j_client.run(
             """
             MATCH (n)
-            WHERE n.name CONTAINS $entity OR n.title CONTAINS $entity
-            WITH n LIMIT 1
+            WHERE toLower(n.name) CONTAINS $entity OR toLower(n.title) CONTAINS $entity
+            WITH n LIMIT 3
             MATCH (n)-[r]-(m)
             RETURN n.name AS source_name, n.title AS source_title,
                    type(r) AS relationship,
@@ -37,8 +38,21 @@ def retrieve_graph_node(state: AgentState) -> dict:
                    labels(m)[0] AS target_type
             LIMIT 20
             """,
-            entity=entity,
+            entity=entity_lower,
         )
         results.extend(records)
+
+    # Fallback: if no results, return all papers with their authors
+    if not results:
+        results = neo4j_client.run(
+            """
+            MATCH (p:Paper)-[:AUTHORED_BY]->(a:Author)
+            RETURN p.title AS source_title, null AS source_name,
+                   'AUTHORED_BY' AS relationship,
+                   a.name AS target_name, null AS target_title,
+                   'Author' AS target_type
+            LIMIT 30
+            """
+        )
 
     return {"graph_results": results}

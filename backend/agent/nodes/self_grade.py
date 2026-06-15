@@ -21,7 +21,7 @@ def _embed(texts: list[str]) -> np.ndarray:
 def self_grade_node(state: AgentState) -> dict:
     question = state["question"]
     answer = state["answer"]
-    chunks = [c["text"] for c in state["merged_results"]] if state["merged_results"] else [""]
+    chunks = [c["text"] for c in state["merged_results"] if c.get("text", "").strip()] if state["merged_results"] else ["no context available"]
 
     all_texts = [question, answer] + chunks
     embeddings = _embed(all_texts)
