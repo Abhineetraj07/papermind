@@ -38,6 +38,18 @@ async def _process_document(doc_id: str, file_path: str, user_id: str, db_doc: D
         chunks = chunk_document(markdown, metadata)
         embed_and_store(chunks, source="user_upload", user_id=user_id)
         build_graph(metadata, chunks, user_id=user_id)
+
+        # Write extracted metadata back to Postgres
+        from db.postgres import AsyncSessionLocal
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(Document).where(Document.id == doc_id))
+            doc = result.scalar_one_or_none()
+            if doc:
+                doc.title = metadata.get("title") or None
+                doc.author = metadata.get("author") or None
+                doc.page_count = metadata.get("page_count") or None
+                await db.commit()
+
         logger.info(f"Document {doc_id} processed successfully.")
     except Exception as e:
         logger.error(f"Document {doc_id} processing failed: {e}")
