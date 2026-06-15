@@ -34,8 +34,8 @@ def self_grade_node(state: AgentState) -> dict:
     faithfulness = float(np.max(cosine_similarity(a_emb, c_embs)))
     answer_relevance = float(cosine_similarity(q_emb, a_emb)[0][0])
 
-    # LLM-as-judge for semantic hallucination
-    context_text = "\n".join(chunks[:4])
+    # LLM-as-judge for semantic hallucination — use all available chunks for context
+    context_text = "\n".join(chunks)
     judge_resp = _client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[

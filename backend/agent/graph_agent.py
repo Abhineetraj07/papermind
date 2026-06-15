@@ -21,7 +21,13 @@ def _route_by_intent(state: AgentState) -> list[str]:
 
 def _should_retry(state: AgentState) -> str:
     composite = (state["context_relevance"] + state["faithfulness"] + state["answer_relevance"]) / 3
-    if (composite < settings.grade_threshold or state["hallucination_detected"]) and state["retry_count"] < settings.max_retries:
+    if state["retry_count"] >= settings.max_retries:
+        return "done"
+    # Cosine scores alone are sufficient to trigger retry
+    if composite < settings.grade_threshold:
+        return "retry"
+    # Judge flag only retries when cosine scores are also mediocre (not just borderline)
+    if state["hallucination_detected"] and composite < 0.80:
         return "retry"
     return "done"
 
